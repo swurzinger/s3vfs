@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net5.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <Reference Include="winfsp-msil, Version=1.0.0.0, Culture=neutral, PublicKeyToken=b099876d8fa9b1f3">
+        <HintPath>..\..\..\..\..\Program Files (x86)\WinFsp\bin\winfsp-msil.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="AWSSDK.S3" Version="3.7.0.22" />
+      <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.21216.1" />
+      <PackageReference Include="System.Security.AccessControl" Version="4.7.0" />
+    </ItemGroup>
+
+</Project>

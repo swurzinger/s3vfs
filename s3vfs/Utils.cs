@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace s3vfs
 {
@@ -32,6 +34,24 @@ namespace s3vfs
             {
                 // Return the list.
                 yield return list;
+            }
+        }
+
+        public static string JoinToString<T>(this IEnumerable<T> enumerable, string delimiter = ", ")
+        {
+            return string.Join(delimiter, enumerable);
+        }
+
+
+        public static void RemoveAll<K, V>(this Dictionary<K, V> dictionary, Func<KeyValuePair<K, V>, bool> filter)
+        {
+            var toRemove = dictionary.Where(filter)
+                .Select(pair => pair.Key)
+                .ToList();
+
+            foreach (var key in toRemove)
+            {
+                dictionary.Remove(key);
             }
         }
     }

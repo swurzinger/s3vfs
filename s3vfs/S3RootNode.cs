@@ -75,7 +75,7 @@ namespace s3vfs
             throw new NotSupportedException();
         }
 
-        public Task Move(S3Path newPath)
+        public Task Move(S3Path newPath, bool replaceIfExists)
         {
             throw new NotSupportedException();
         }
@@ -95,23 +95,28 @@ namespace s3vfs
             // do nothing
         }
 
-        public IS3Node CreateDirectory(string name)
+        public IS3Node CreateDirectory(S3Path path)
         {
             throw new NotImplementedException();
         }
 
-        public IS3Node CreateFile(string name)
+        public IS3Node CreateFile(S3Path path)
         {
             throw new NotSupportedException();
         }
 
         public async Task PersistChanges()
         {
+            // do nothing
+        }
+
+        public async Task PersistChangesRecursive()
+        {
             if (buckets != null)
             {
                 foreach (var s3BucketNode in buckets)
                 {
-                    await s3BucketNode.PersistChanges();
+                    await s3BucketNode.PersistChangesRecursive();
                 }
             }
         }

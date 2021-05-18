@@ -7,23 +7,22 @@ using Fsp.Interop;
 
 namespace s3vfs
 {
-    public class S3ObjectNode : IS3Node
+    public partial class S3ObjectNode : IS3Node
     {
         private S3BucketNode bucket;
         private S3ObjectDataCache dataCache;
 
-        public S3ObjectNode(S3BucketNode bucket, string key, ulong size, DateTime lastModified)
+        public S3ObjectNode(S3BucketNode bucket, string key, ulong size, DateTime lastModified, S3NodeStatus status = S3NodeStatus.Active)
         {
-            Name = key.Split("/", StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
             Key = key;
             Size = size;
             LastModified = lastModified;
             this.bucket = bucket;
-            this.Status = S3NodeStatus.Active;
+            this.Status = status;
         }
 
         public S3NodeStatus Status { get; private set; }
-        public string Name { get; private set; }
+        public string Name => Path.Name;
         public string Key { get; private set; }
         public ulong Size { get; private set; }
         public DateTime LastModified { get; private set; }
@@ -33,13 +32,15 @@ namespace s3vfs
         public FileInfo GetFileInfo()
         {
             ulong lastModified = (UInt64) LastModified.ToFileTimeUtc();
+            ulong allocationSize = dataCache?.AllocatedSize ??
+                                   ((Size + S3Filesystem.ALLOCATION_UNIT - 1) / S3Filesystem.ALLOCATION_UNIT) * S3Filesystem.ALLOCATION_UNIT;
             return new FileInfo()
             {
                 CreationTime = lastModified,
                 LastWriteTime = lastModified,
                 ChangeTime = lastModified,
                 FileAttributes = 0,
-                AllocationSize = Size,
+                AllocationSize = allocationSize,
                 FileSize = Size,
             };
         }
@@ -69,7 +70,7 @@ namespace s3vfs
             return dataCache;
         }
 
-        public async Task Move(S3Path newPath)
+        public async Task Move(S3Path newPath, bool replaceIfExists)
         {
             if (newPath == null || string.IsNullOrEmpty(newPath.BucketName) || string.IsNullOrEmpty(newPath.ObjectKey))
                 throw new ArgumentException($"cannot move {Path} to {newPath}");
@@ -80,19 +81,21 @@ namespace s3vfs
             if (oldParent == null || newParent == null || newBucket == null)
                 throw new ArgumentException($"cannot move {Path} to {newPath}");
 
-            var copyRequest = new CopyObjectRequest()
+            if (Status == S3NodeStatus.Active || Status == S3NodeStatus.Modified)
             {
-                SourceBucket = bucket.Name,
-                SourceKey = Key,
-                DestinationBucket = newPath.BucketName,
-                DestinationKey = newPath.ObjectKey,
-            };
-            await bucket.S3Root.S3Client.CopyObjectAsync(copyRequest);
-            await bucket.S3Root.S3Client.DeleteObjectAsync(Path.BucketName, Path.ObjectKey);
+                var copyRequest = new CopyObjectRequest()
+                {
+                    SourceBucket = bucket.Name,
+                    SourceKey = Key,
+                    DestinationBucket = newPath.BucketName,
+                    DestinationKey = newPath.ObjectKey,
+                };
+                await bucket.S3Root.S3Client.CopyObjectAsync(copyRequest);
+                await bucket.S3Root.S3Client.DeleteObjectAsync(Path.BucketName, Path.ObjectKey);
+            }
 
             bucket = newBucket;
             Key = newPath.ObjectKey;
-            Name = Key.Split("/", StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
 
             (oldParent as S3StructureNode)?.CacheRemove(this);
             (newParent as S3StructureNode)?.CacheAdd(this);
@@ -124,19 +127,28 @@ namespace s3vfs
             }
         }
 
-        public IS3Node CreateFile(string name)
+        public IS3Node CreateFile(S3Path path)
         {
             throw new InvalidOperationException("cannot create sub-element for file");
         }
 
-        public IS3Node CreateDirectory(string name)
+        public IS3Node CreateDirectory(S3Path path)
         {
             throw new InvalidOperationException("cannot create sub-element for file");
         }
 
-        public Task PersistChanges()
+        public async Task PersistChanges()
         {
-            throw new NotImplementedException();
+            if (Status == S3NodeStatus.New || Status == S3NodeStatus.Modified)
+            {
+                GetObjectData();        // create dataCache, if necessary
+                await dataCache.Persist();
+            }
+        }
+
+        public async Task PersistChangesRecursive()
+        {
+            await PersistChanges();
         }
 
         internal void SetDeletedFromBulkDeletion()

@@ -19,7 +19,7 @@ namespace s3vfs
 
         public IS3ObjectData GetObjectData();
 
-        public Task Move(S3Path newPath);
+        public Task Move(S3Path newPath, bool replaceIfExists);
 
         public Task DeleteRecursive();
 
@@ -27,10 +27,11 @@ namespace s3vfs
 
         public void MarkForDeletion();
 
-        public IS3Node CreateFile(string name);
+        public IS3Node CreateFile(S3Path path);
 
-        public IS3Node CreateDirectory(string name);
+        public IS3Node CreateDirectory(S3Path path);
 
         public Task PersistChanges();
+        public Task PersistChangesRecursive();
     }
 }

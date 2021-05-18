@@ -18,8 +18,8 @@ namespace s3vfs
 {
     public class S3Filesystem : FileSystemBase
     {
-        private const int ALLOCATION_UNIT = 4096;
-        private const int SECTORS_PER_ALLOCATION_UNIT = 1;
+        public const int ALLOCATION_UNIT = 4096;
+        public const int SECTORS_PER_ALLOCATION_UNIT = 1;
         private static readonly Byte[] EmptyByteArray = new Byte[0];
         private static readonly Byte[] DefaultSecurity;
 
@@ -53,7 +53,6 @@ namespace s3vfs
             Host = (FileSystemHost)hostObject;
             Host.SectorSize = ALLOCATION_UNIT;
             Host.SectorsPerAllocationUnit = SECTORS_PER_ALLOCATION_UNIT;
-            Host.SectorsPerAllocationUnit = 1;
             Host.CaseSensitiveSearch = true;
             Host.CasePreservedNames = true;
             Host.UnicodeOnDisk = true;
@@ -129,6 +128,13 @@ namespace s3vfs
             return STATUS_SUCCESS;
         }
 
+        public override void Close(object fileNode, object fileDesc)
+        {
+            IS3Node s3Node = (IS3Node)fileNode;
+
+            s3Node.PersistChanges().Wait();
+        }
+
 
         public override Int32 Read(
             Object fileNode,
@@ -160,6 +166,66 @@ namespace s3vfs
             bytesTransferred = (uint)requestedContent.Length;
 
             Marshal.Copy(requestedContent, 0, buffer, requestedContent.Length);
+
+            return STATUS_SUCCESS;
+        }
+
+        public override Int32 Write(
+            Object fileNode,
+            Object fileDesc,
+            IntPtr buffer,
+            UInt64 offset,
+            UInt32 length,
+            Boolean writeToEndOfFile,
+            Boolean constrainedIo,
+            out UInt32 bytesTransferred,
+            out FileInfo fileInfo)
+        {
+            IS3Node s3Node = (IS3Node)fileNode;
+            UInt64 endOffset;
+
+            var fileSize = s3Node.GetFileInfo().FileSize;
+
+            if (constrainedIo)
+            {
+                if (offset >= fileSize)
+                {
+                    bytesTransferred = default(UInt32);
+                    fileInfo = default(FileInfo);
+                    return STATUS_SUCCESS;
+                }
+                endOffset = offset + length;
+                if (endOffset > fileSize) endOffset = fileSize;
+            }
+            else
+            {
+                if (writeToEndOfFile) offset = fileSize;
+                endOffset = offset + length;
+                if (endOffset > fileSize)
+                {
+                    s3Node.GetObjectData().SetFileSize(endOffset, false);
+                }
+            }
+
+            bytesTransferred = (UInt32)(endOffset - offset);
+            byte[] data = new byte[bytesTransferred];
+            Marshal.Copy(buffer, data, 0, (int)bytesTransferred);
+            s3Node.GetObjectData().Write(offset, data);
+
+            fileInfo = s3Node.GetFileInfo();
+
+            return STATUS_SUCCESS;
+        }
+
+        public override Int32 Flush(
+            Object fileNode,
+            Object fileDesc,
+            out FileInfo fileInfo)
+        {
+            IS3Node s3Node = (IS3Node)fileNode;
+
+            s3Node.PersistChanges();
+            fileInfo = s3Node.GetFileInfo();
 
             return STATUS_SUCCESS;
         }
@@ -218,6 +284,7 @@ namespace s3vfs
 
             if (enumerator == null)
             {
+                // Console.WriteLine($"read dir {s3Node.Path}");
                 List<String> dotEntries = new List<String>();
                 if (s3Node != S3RootNode)
                 {
@@ -254,6 +321,7 @@ namespace s3vfs
                 else if (enumerator.Current is IS3Node childS3Node)
                 {
                     fileName = childS3Node.Name;
+                    // Console.WriteLine($" - {fileName}");
                     fileInfo = childS3Node.GetFileInfo();
                     return true;
                 }
@@ -268,23 +336,34 @@ namespace s3vfs
         public override int Rename(object fileNode, object fileDesc, string fileName, string newFileName, bool replaceIfExists)
         {
             IS3Node s3Node = (IS3Node)fileNode;
-            return STATUS_IO_DEVICE_ERROR;
-        }
 
-        public override int CanDelete(object fileNode, object fileDesc, string fileName)
-        {
-            IS3Node s3Node = (IS3Node)fileNode;
-            if (s3Node.GetChildren().Result.Any())
-                return STATUS_DIRECTORY_NOT_EMPTY;
+            s3Node.Move(S3Path.FromPath(newFileName), replaceIfExists).Wait();
 
+            // Console.WriteLine($"move {s3Node.Path} to {newFileName}");
             return STATUS_SUCCESS;
         }
+
+        // public override int CanDelete(object fileNode, object fileDesc, string fileName)
+        // {
+        //     IS3Node s3Node = (IS3Node)fileNode;
+        //     if (s3Node.GetChildren().Result.Any())
+        //         return STATUS_DIRECTORY_NOT_EMPTY;
+        //
+        //     return STATUS_SUCCESS;
+        // }
 
         public override void Cleanup(object fileNode, object fileDesc, string fileName, uint flags)
         {
             IS3Node s3Node = (IS3Node)fileNode;
 
-            if (0 != (flags & CleanupDelete) && CanDelete(fileNode, fileDesc, fileName) == 0)
+            if (0 != (flags & CleanupSetAllocationSize))
+            {
+                UInt64 AllocationUnit = ALLOCATION_UNIT * SECTORS_PER_ALLOCATION_UNIT;
+                UInt64 allocationSize = (s3Node.GetFileInfo().FileSize + AllocationUnit - 1) / AllocationUnit * AllocationUnit;
+                s3Node.GetObjectData().SetFileSize(allocationSize, true);
+            }
+
+            if (0 != (flags & CleanupDelete))
             {
                 s3Node.DeleteRecursive();
             }
@@ -336,29 +415,63 @@ namespace s3vfs
 
             if (0 != (createOptions & FILE_DIRECTORY_FILE))
             {
-                s3Node = parentNode.CreateDirectory(filePath.Name);
+                s3Node = parentNode.CreateDirectory(filePath);
                 allocationSize = 0;
             }
             else
             {
-                s3Node = parentNode.CreateFile(filePath.Name);
+                s3Node = parentNode.CreateFile(filePath);
             }
 
             if (s3Node == null) return STATUS_IO_DEVICE_ERROR;
 
-            // TODO: implement write and resize
-            // if (0 != allocationSize)
-            // {
-            //     result = SetFileSizeInternal(FileNode, allocationSize, true);
-            //     if (0 > result)
-            //         return result;
-            // }
+            if (0 != allocationSize)
+            {
+                s3Node.GetObjectData().SetFileSize(allocationSize, true);
+            }
 
             // Interlocked.Increment(ref s3Node.OpenCount);
             fileNode = s3Node;
             fileInfo = s3Node.GetFileInfo();
             normalizedName = s3Node.Name;
 
+            return STATUS_SUCCESS;
+        }
+
+        public override Int32 OverwriteEx(
+            Object fileNode,
+            Object fileDesc,
+            UInt32 fileAttributes,
+            Boolean replaceFileAttributes,
+            UInt64 allocationSize,
+            IntPtr ea,
+            UInt32 eaLength,
+            out FileInfo fileInfo)
+        {
+            IS3Node s3Node = (IS3Node)fileNode;
+
+            s3Node.GetObjectData().SetFileSize(allocationSize, true);
+            s3Node.GetObjectData().SetFileSize(0, false);
+
+            fileInfo = s3Node.GetFileInfo();
+
+            return STATUS_SUCCESS;
+        }
+
+
+        public override Int32 SetFileSize(
+            Object fileNode,
+            Object fileDesc,
+            UInt64 newSize,
+            Boolean setAllocationSize,
+            out FileInfo fileInfo)
+        {
+            IS3Node s3Node = (IS3Node)fileNode;
+            s3Node.GetObjectData().SetFileSize(newSize, setAllocationSize);
+            fileInfo = s3Node.GetFileInfo();
+
+            // STATUS_DISK_FULL
+            // STATUS_INSUFFICIENT_RESOURCES
             return STATUS_SUCCESS;
         }
 

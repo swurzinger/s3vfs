@@ -49,5 +49,23 @@ namespace s3vfs
         {
             return BucketName + "/" + ObjectKey;
         }
+
+        protected bool Equals(S3Path other)
+        {
+            return BucketName == other.BucketName && ObjectKey == other.ObjectKey;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((S3Path) obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(BucketName, ObjectKey);
+        }
     }
 }

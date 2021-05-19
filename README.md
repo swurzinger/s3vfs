@@ -7,6 +7,7 @@ Creates a virtual drive, which allows to access S3 objects in a file system stru
 ### Prerequisites
 The implementation requires the WinFSP user-mode file system driver to be installed on your system.
  - [WinFSP driver](https://github.com/billziss-gh/winfsp/releases)
+ - [.NET 5.0 runtime](https://dotnet.microsoft.com/download) (if not using the standalone version)
 
 ### Mounting S3 buckets as drive
 Run the following command (filling in your S3 credentials) to mount all accessible buckets as drive `Z:`

@@ -1,8 +1,5 @@
 using System;
-using System.CommandLine;
-using System.CommandLine.Invocation;
 using System.IO;
-using System.Linq;
 using Fsp;
 
 namespace s3vfs
@@ -10,47 +7,31 @@ namespace s3vfs
     public class S3VfsService : Service
     {
         private FileSystemHost _Host;
+        private S3VfsServiceOptions options;
 
-        public S3VfsService() : base("S3VFSService")
+        public S3VfsService(S3VfsServiceOptions options) : base("S3VFSService")
         {
+            this.options = options;
         }
 
         protected override void OnStart(String[] args)
         {
-            var cmd = new RootCommand
+            if (string.IsNullOrEmpty(options.VolumePrefix) && string.IsNullOrEmpty(options.MountPoint))
             {
-                new Option<string>(new[] { "--s3Url", "-e" }, "S3 service endpoint url"),
-                new Option<string>(new[] { "--accessKey", "-a" }, "S3 access key"),
-                new Option<string>(new[] { "--secretKey", "-s" }, "S3 secret key"),
-                new Option<string>(new[] { "--volumePrefix", "-u" }, "Volume Prefix (e.g. \\prefix\\service)"),
-                new Option<string>(new[] { "--mountPoint", "-m" }, "MountPoint (e.g. Z:)"),
-            };
+                throw new ArgumentException("either volumePrefix or mountPoint is required");
+            }
 
-            cmd.Handler = CommandHandler.Create<string, string, string, string, string, IConsole>(RunService);
-            int rc = cmd.Invoke(args.Skip(1).ToArray());
-            this.ExitCode = rc;
-            if (rc != 0) throw new Exception("return code " + rc);
-        }
-
-        protected override void OnStop()
-        {
-            _Host.Unmount();
-            _Host = null;
-        }
-
-        private void RunService(string s3Url, string accessKey, string secretKey, string volumePrefix, string mountPoint, IConsole console)
-        {
             try
             {
-                var s3Filesystem = new S3Filesystem(s3Url, accessKey, secretKey);
+                var s3Filesystem = new S3Filesystem(options.S3Url, options.AccessKey, options.SecretKey);
                 FileSystemHost.SetDebugLogFile("-");
-                var host = new FileSystemHost(s3Filesystem) { Prefix = volumePrefix };
-                int rc = host.Mount(mountPoint);
+                var host = new FileSystemHost(s3Filesystem) { Prefix = options.VolumePrefix };
+                int rc = host.Mount(options.MountPoint);
                 if (0 > rc)
                 {
                     throw new IOException("cannot mount file system; rc = " + rc);
                 }
-                console.Out.Write("mounted: " + host.MountPoint() + "\n");
+                Log(EVENTLOG_INFORMATION_TYPE, "mounted on: " + host.MountPoint() + "\n");
                 _Host = host;
             }
             catch (Exception ex)
@@ -58,6 +39,12 @@ namespace s3vfs
                 Log(EVENTLOG_ERROR_TYPE, ex.Message);
                 throw;
             }
+        }
+
+        protected override void OnStop()
+        {
+            _Host.Unmount();
+            _Host = null;
         }
     }
 }

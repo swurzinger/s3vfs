@@ -15,6 +15,15 @@ variables:
   buildConfiguration: 'Release'
 
 steps:
+
+- task: ChocolateyToolInstaller@0
+
+- task: ChocolateyCommand@0
+  inputs:
+    command: 'install'
+    installPackageId: 'winfsp'
+    installPackageVersion: '1.9.21096'
+
 - task: NuGetToolInstaller@1
 
 - task: NuGetCommand@2

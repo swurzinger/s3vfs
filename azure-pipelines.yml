@@ -74,3 +74,13 @@ steps:
     arguments: '-r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -v d -c $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/standalone'
     zipAfterPublish: false
     modifyOutputPath: false
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/regular' 
+    artifactName: 's3vfs'
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/standalone' 
+    artifactName: 's3vfs-standalone'

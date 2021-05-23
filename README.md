@@ -1,3 +1,5 @@
+[![Build Status](https://dev.azure.com/swurzinger/s3vfs/_apis/build/status/swurzinger.s3vfs?branchName=master)](https://dev.azure.com/swurzinger/s3vfs/_build/latest?definitionId=1&branchName=master)
+
 # S3 virtual file system
 
 Creates a virtual drive, which allows to access S3 objects in a file system structure just as if the data would be stored on a local or network drive.

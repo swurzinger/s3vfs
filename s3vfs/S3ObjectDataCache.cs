@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace s3vfs
 {
@@ -35,7 +36,7 @@ namespace s3vfs
             public ulong FileSize
             {
                 get => s3Node.Size;
-                set { s3Node.Size = value; }
+                private set { s3Node.Size = value; }
             }
 
             public ulong AllocatedSize { get; private set; }
@@ -51,11 +52,14 @@ namespace s3vfs
                     memoryCache.Add(downloadedBlock.Offset, downloadedBlock);
                 }
 
+                if (missingBlocks.NotEmpty()) UpdateCache();
+
                 return ReadFromMemoryCache(offset, length);
             }
 
             public void Write(ulong offset, byte[] data)
             {
+                var prevCacheSize = memoryCache.Count;
                 uint blockIndex = (uint) (offset / MEMCACHE_BLOCKSIZE);
                 uint blockOffset = (uint) (offset % MEMCACHE_BLOCKSIZE);
                 uint remainingLength = (uint)data.Length;
@@ -87,12 +91,23 @@ namespace s3vfs
                     blockOffset = 0;
                     dataOffset += (int)blockBytes;
                 }
+
+                if (s3Node.Status == S3NodeStatus.Active)
+                {
+                    s3Node.Status = S3NodeStatus.Modified;
+                    UpdateCache();
+                }
+                else if (memoryCache.Count != prevCacheSize)
+                {
+                    UpdateCache();
+                }
             }
 
             public void SetFileSize(UInt64 size, bool setAllocatedSize)
             {
                 var prevAllocatedSize = AllocatedSize;
                 var prevFileSize = FileSize;
+                var prevCacheSize = memoryCache.Count;
                 if (setAllocatedSize)
                 {
                     AllocatedSize = size;
@@ -113,12 +128,17 @@ namespace s3vfs
                 if (prevFileSize != FileSize && s3Node.Status == S3NodeStatus.Active)
                 {
                     s3Node.Status = S3NodeStatus.Modified;
+                    UpdateCache();
+                }
+                else if (memoryCache.Count != prevCacheSize)
+                {
+                    UpdateCache();
                 }
             }
 
             public async Task Persist()
             {
-                if (await persistingSemaphore.WaitAsync(-1))
+                if (await persistingSemaphore.WaitAsync(Timeout.Infinite))
                 {
                     try
                     {
@@ -146,11 +166,27 @@ namespace s3vfs
                         persistingSemaphore.Release();
                     }
                 }
+
+                UpdateCache();
             }
 
             public void ClearCache()
             {
                 memoryCache.Clear();
+                UpdateCache();
+            }
+
+            public void UpdateCache()
+            {
+                var priority = CacheItemPriority.Normal;
+                if (s3Node.Status == S3NodeStatus.Modified || s3Node.Status == S3NodeStatus.New) priority = CacheItemPriority.NeverRemove;
+                var cacheOptions = new MemoryCacheEntryOptions()
+                {
+                    Priority = priority,
+                    Size = memoryCache.Count,
+                    SlidingExpiration = priority == CacheItemPriority.NeverRemove ? null : TimeSpan.FromHours(1)
+                };
+                S3CacheManager.ObjectDataCache.Set(s3Node.Path.ToString(), this, cacheOptions);
             }
 
             private async Task<Block> DownloadBlock(Block block)

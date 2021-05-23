@@ -54,5 +54,17 @@ namespace s3vfs
                 dictionary.Remove(key);
             }
         }
+
+        public static bool Empty<T>(this IEnumerable<T> list)
+        {
+            if (list == null) return true;
+            return (!list.Any());
+        }
+
+        public static bool NotEmpty<T>(this IEnumerable<T> list)
+        {
+            if (list == null) return false;
+            return (list.Any());
+        }
     }
 }

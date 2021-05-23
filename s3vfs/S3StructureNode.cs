@@ -69,7 +69,7 @@ namespace s3vfs
         private async Task FetchContents()
         {
             if (Status == S3NodeStatus.New || Status == S3NodeStatus.Deleted) return;
-            if (await fetchingSemaphore.WaitAsync(-1))
+            if (await fetchingSemaphore.WaitAsync(Timeout.Infinite))
             {
                 try
                 {

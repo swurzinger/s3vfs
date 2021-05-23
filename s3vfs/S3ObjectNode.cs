@@ -1,16 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Amazon.S3.Model;
 using Fsp.Interop;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace s3vfs
 {
     public partial class S3ObjectNode : IS3Node
     {
         private S3BucketNode bucket;
-        private S3ObjectDataCache dataCache;
+        private readonly SemaphoreSlim dataInitSemaphore = new SemaphoreSlim(1, 1);
 
         public S3ObjectNode(S3BucketNode bucket, string key, ulong size, DateTime lastModified, S3NodeStatus status = S3NodeStatus.Active)
         {
@@ -32,7 +34,7 @@ namespace s3vfs
         public FileInfo GetFileInfo()
         {
             ulong lastModified = (UInt64) LastModified.ToFileTimeUtc();
-            ulong allocationSize = dataCache?.AllocatedSize ??
+            ulong allocationSize = TryGetObjectDataInternal()?.AllocatedSize ??
                                    ((Size + S3Filesystem.ALLOCATION_UNIT - 1) / S3Filesystem.ALLOCATION_UNIT) * S3Filesystem.ALLOCATION_UNIT;
             return new FileInfo()
             {
@@ -60,14 +62,36 @@ namespace s3vfs
             return null;
         }
 
+        private S3ObjectDataCache TryGetObjectDataInternal()
+        {
+            bool found = S3CacheManager.ObjectDataCache.TryGetValue(Path.ToString(), out object rawData);
+            if (found) return rawData as S3ObjectDataCache;
+            return null;
+        }
+
         public IS3ObjectData GetObjectData()
         {
-            if (dataCache == null)
+            var data = TryGetObjectDataInternal();
+            if (data != null) return data;
+
+            if (dataInitSemaphore.Wait(Timeout.Infinite))
             {
-                dataCache = new S3ObjectDataCache(this, this.bucket.S3Root.S3Client);
+                try
+                {
+                    data = TryGetObjectDataInternal();
+                    if (data != null) return data;
+
+                    var dataCache = new S3ObjectDataCache(this, bucket.S3Root.S3Client);
+                    dataCache.UpdateCache();
+                    return dataCache;
+                }
+                finally
+                {
+                    dataInitSemaphore.Release();
+                }
             }
 
-            return dataCache;
+            return TryGetObjectDataInternal();
         }
 
         public async Task Move(S3Path newPath, bool replaceIfExists)
@@ -94,8 +118,11 @@ namespace s3vfs
                 await bucket.S3Root.S3Client.DeleteObjectAsync(Path.BucketName, Path.ObjectKey);
             }
 
+            var data = TryGetObjectDataInternal();
+            S3CacheManager.ObjectDataCache.Remove(Path.ToString());
             bucket = newBucket;
             Key = newPath.ObjectKey;
+            data?.UpdateCache();
 
             (oldParent as S3StructureNode)?.CacheRemove(this);
             (newParent as S3StructureNode)?.CacheAdd(this);
@@ -114,6 +141,7 @@ namespace s3vfs
                 {
                     var deleteResponse = await bucket.S3Root.S3Client.DeleteObjectAsync(bucket.Name, Key);
                 }
+                S3CacheManager.ObjectDataCache.Remove(Path.ToString());
                 var parent = bucket.LookupNode(Path.Parent) as S3StructureNode;
                 parent?.CacheRemove(this);
             }
@@ -141,7 +169,8 @@ namespace s3vfs
         {
             if (Status == S3NodeStatus.New || Status == S3NodeStatus.Modified)
             {
-                GetObjectData();        // create dataCache, if necessary
+                // create dataCache, if necessary
+                var dataCache = (S3ObjectDataCache)GetObjectData();
                 await dataCache.Persist();
             }
         }

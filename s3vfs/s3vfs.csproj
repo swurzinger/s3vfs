@@ -16,8 +16,9 @@
 
     <ItemGroup>
       <PackageReference Include="AWSSDK.S3" Version="3.7.0.22" />
+      <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="6.0.0-preview.3.21201.4" />
       <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.21216.1" />
-      <PackageReference Include="System.Security.AccessControl" Version="4.7.0" />
+      <PackageReference Include="System.Security.AccessControl" Version="5.0.0" />
     </ItemGroup>
 
 </Project>

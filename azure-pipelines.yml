@@ -16,6 +16,12 @@ variables:
 
 steps:
 
+- task: gitversion/setup@0
+  inputs:
+    versionSpec: '0.x'
+
+- task: gitversion/execute@0
+
 - task: ChocolateyToolInstaller@0
 
 - task: ChocolateyCommand@0

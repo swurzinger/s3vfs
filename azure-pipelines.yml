@@ -19,45 +19,33 @@ steps:
 - task: ChocolateyToolInstaller@0
 
 - task: ChocolateyCommand@0
+  displayName: 'install winfsp'
   inputs:
     command: 'install'
     installPackageId: 'winfsp'
     installPackageVersion: '1.9.21096'
 
-#- task: NuGetToolInstaller@1
-#
-#- task: NuGetCommand@2
-#  inputs:
-#    restoreSolution: '$(solution)'
-#
-#- task: VSBuild@1
-#  inputs:
-#    solution: '$(solution)'
-#    platform: '$(buildPlatform)'
-#    configuration: '$(buildConfiguration)'
-#
-#- task: VSTest@2
-#  inputs:
-#    platform: '$(buildPlatform)'
-#    configuration: '$(buildConfiguration)'
-
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet restore'
   inputs:
     command: 'restore'
     projects: '$(solution)'
     feedsToUse: 'select'
 
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet build'
   inputs:
     command: 'build'
     projects: '$(solution)'
 
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet test'
   inputs:
     command: 'test'
     projects: '$(solution)'
 
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet publish'
   inputs:
     command: 'publish'
     publishWebProjects: false
@@ -67,6 +55,7 @@ steps:
     modifyOutputPath: false
 
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet publish (standalone)'
   inputs:
     command: 'publish'
     publishWebProjects: false

@@ -23,6 +23,9 @@ steps:
     command: 'install'
     installPackageId: 'winfsp'
     installPackageVersion: '1.9.21096'
+    debug: true
+    verbose: true
+    trace: true
 
 - task: NuGetToolInstaller@1
 

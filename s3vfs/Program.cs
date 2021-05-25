@@ -23,6 +23,7 @@ namespace s3vfs
                 {
                     IsRequired = true,
                 },
+                new Option<string>(new[] { "--region", "-r" }, "S3 authentication region"),
                 new Option<string>(new[] { "--volumePrefix", "-u" }, "Volume Prefix (e.g. \\prefix\\service)"),
                 new Option<string>(new[] { "--mountPoint", "-m" }, "MountPoint (e.g. Z:)"),
             };

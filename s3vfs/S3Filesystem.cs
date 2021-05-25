@@ -34,13 +34,14 @@ namespace s3vfs
             rootSecurityDescriptor.GetBinaryForm(DefaultSecurity, 0);
         }
 
-        public S3Filesystem(string serviceUrl, string accessKey, string secretKey)
+        public S3Filesystem(string serviceUrl, string accessKey, string secretKey, string authRegion)
         {
             AmazonS3Config config = new AmazonS3Config()
             {
                 ServiceURL = serviceUrl,
                 UseHttp = true,
                 ForcePathStyle = true,
+                AuthenticationRegion = authRegion,
             };
 
             AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);

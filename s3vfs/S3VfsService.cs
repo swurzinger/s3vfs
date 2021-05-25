@@ -23,7 +23,8 @@ namespace s3vfs
 
             try
             {
-                var s3Filesystem = new S3Filesystem(options.S3Url, options.AccessKey, options.SecretKey);
+                if (string.IsNullOrWhiteSpace(options.Region)) options.Region = null;
+                var s3Filesystem = new S3Filesystem(options.S3Url, options.AccessKey, options.SecretKey, options.Region);
                 FileSystemHost.SetDebugLogFile("-");
                 var host = new FileSystemHost(s3Filesystem) { Prefix = options.VolumePrefix };
                 int rc = host.Mount(options.MountPoint);

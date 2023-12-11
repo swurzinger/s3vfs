@@ -1,4 +1,16 @@
 [![Build Status](https://dev.azure.com/swurzinger/s3vfs/_apis/build/status/swurzinger.s3vfs?branchName=master)](https://dev.azure.com/swurzinger/s3vfs/_build/latest?definitionId=1&branchName=master)
+![status: inactive](https://img.shields.io/badge/status-inactive-red.svg)
+
+# This is currently unmaintained
+### .. and still has some bugs, so not recommended to be used as-is.
+### You can use [rclone](https://github.com/rclone/rclone) instead with the [`rclone mount`](https://rclone.org/commands/rclone_mount/) command.
+
+.
+
+---
+
+.
+
 
 # S3 virtual file system
 
